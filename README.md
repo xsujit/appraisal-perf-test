@@ -1,1 +1,1 @@
-# appraisal_perf_test
+# Locust performance test for appraisal application
