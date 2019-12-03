@@ -55,6 +55,12 @@ class UserBehavior(TaskSet):
 
 class WebsiteUser(HttpLocust):
 
+    def setup(self):
+        print("setup called")
+    
+    def teardown(self):
+        print("teardown  called")
+    
     host = "https://localhost:8443"
     task_set = UserBehavior
     wait_time = between(5.0, 9.0)
