@@ -1,66 +1,58 @@
-from locust import HttpLocust, TaskSet, task, between
-import certifi
-import urllib3
-import ssl
+from locust import HttpUser, TaskSet, between, task, events
+import logging
 
-def cert_exists():
-    with open(certifi.where()) as cr_file:
-        if ssl.get_server_certificate(('localhost', 8443)) in cr_file.read():
-            print("Cert exists in file")
-            return True
-        else:
-            return False
-            
 
-if(cert_exists() != True):
-    cert_file = open(certifi.where(), "a")        
-    cert_file.write(ssl.get_server_certificate(('localhost', 8443)))
-    cert_file.close()
-        
+class AppraisalTask(TaskSet):
 
-class UserBehavior(TaskSet):
+    user_num = 0
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        AppraisalTask.user_num += 1
+        self.user_num = AppraisalTask.user_num
 
     def on_start(self):
-        self.login()
-
+        logging.info("on_start for user: {}".format(self.user_num))
+        r = self.client.post("/login", {"username": "jack.bauer@mastek.com", "password": "password1"})
+        assert r.status_code == 200, "Unexpected status code {}".format(r.status_code)
 
     def on_stop(self):
-        self.logout()
-
-        
-    def login(self):
-        self.client.post("/login", {"username":"jack.bauer@mastek.com", "password":"password"}, verify=certifi.where())
-
-
-    def logout(self):
-        self.client.post("/logout", {"username":"jack.bauer@mastek.com", "password":"password"}, verify=certifi.where())
-
+        r = self.client.post("/logout", {"username": "jack.bauer@mastek.com", "password": "password1"})
+        assert r.status_code == 200, "Unexpected status code {}".format(r.status_code)
 
     @task(1)
     def index(self):
-        self.client.get("/", verify=certifi.where())
-
+        logging.info("User: {} | index".format(self.user_num))
+        r = self.client.get("/")
+        assert r.status_code == 200, "Unexpected status code {}".format(r.status_code)
 
     @task(2)
     def profile(self):
-        r = self.client.get("/appraisal", verify=certifi.where())
+        logging.info("User: {} | profile".format(self.user_num))
+        r = self.client.get("/appraisal")
         assert r.status_code == 200 and "Project Title" in r.text
 
-        
     @task(2)
     def team(self):
-        r = self.client.get("/team", verify=certifi.where(), headers={"content-type":"application/json"})        
+        logging.info("User: {} | team".format(self.user_num))
+        r = self.client.get("/team", headers={"content-type": "application/json"})
         assert r.status_code == 200 and "Here you can view all your team members" in r.text
 
 
-class WebsiteUser(HttpLocust):
+class AppraisalUser(HttpUser):
 
-    def setup(self):
-        print("setup called")
-    
-    def teardown(self):
-        print("teardown  called")
-    
-    host = "https://localhost:8443"
-    task_set = UserBehavior
-    wait_time = between(5.0, 9.0)
+    @staticmethod
+    @events.test_start.add_listener
+    def setup(**kwargs):
+        print("*** Test Starting ***")
+        logging.basicConfig(format='%(name)s - %(levelname)s - %(message)s')
+
+    @staticmethod
+    @events.test_stop.add_listener
+    def teardown(**kwargs):
+        print("*** Test Stopping ***")
+        print("Total users: {}".format(AppraisalTask.user_num))
+
+    host = "http://localhost:8080"
+    tasks = [AppraisalTask]
+    wait_time = between(1, 1)
